@@ -5,25 +5,1291 @@
 
 ---
 
-## 📋 Table of Contents
+## 🎯 Dành cho ai?
 
-1. [System Architecture](#-system-architecture)
-2. [API Endpoint](#-api-endpoint)
-3. [Request Flow](#-request-flow)
-4. [Authentication & Identity](#-authentication--identity)
-5. [Request Schema](#-request-schema)
-6. [Response Format](#-response-format)
-7. [17 Event Types](#-17-event-types)
-8. [Context Enrichment](#-context-enrichment)
-9. [Queue & Worker System](#-queue--worker-system)
-10. [Implementation Guide](#-implementation-guide)
-11. [Best Practices](#-best-practices)
-12. [Database Schema](#-database-schema)
-13. [Troubleshooting](#-troubleshooting)
+### 👨‍💻 Frontend Developers
+**Bạn cần đọc:**
+- [Quick Start cho Frontend](#-frontend-quick-start) - Bắt đầu ngay trong 5 phút
+- [17 Event Types với Ví dụ Chi tiết](#-frontend-guide---17-event-types) - Copy & Paste code
+- [Vue 3 Composable](#vue-3-composable-ready-to-use) - Helper functions có sẵn
+- [Best Practices cho Frontend](#-frontend-best-practices) - Tránh các lỗi thường gặp
+- [API Reference](#-api-reference) - Endpoint và Headers
+
+### 👨‍🔧 Backend Developers
+**Bạn cần đọc:**
+- [System Architecture](#-backend-guide---system-architecture) - Hiểu toàn bộ flow
+- [Request Flow](#-request-flow-chi-tiết) - Middleware → Controller → Queue → Worker
+- [Authentication & Identity](#-authentication--identity) - Cookie, JWT, Session management
+- [Queue & Worker System](#-queue--worker-system) - MongoDB Queue implementation
+- [Database Schema](#-database-schema) - Events collection structure
+- [Troubleshooting](#-backend-troubleshooting) - Debug và fix issues
 
 ---
 
-## 🏗 System Architecture
+## 📋 Table of Contents
+
+### 🎨 Frontend Guide
+1. [Frontend Quick Start](#-frontend-quick-start)
+2. [17 Event Types với Ví dụ](#-frontend-guide---17-event-types)
+3. [Vue 3 Composable](#vue-3-composable-ready-to-use)
+4. [Frontend Best Practices](#-frontend-best-practices)
+5. [API Reference](#-api-reference)
+
+### ⚙️ Backend Guide
+6. [System Architecture](#-backend-guide---system-architecture)
+7. [Request Flow Chi tiết](#-request-flow-chi-tiết)
+8. [Authentication & Identity](#-authentication--identity)
+9. [Queue & Worker System](#-queue--worker-system)
+10. [Database Schema](#-database-schema)
+11. [Backend Troubleshooting](#-backend-troubleshooting)
+
+---
+
+# 🎨 FRONTEND GUIDE
+
+---
+
+## ⚡ Frontend Quick Start
+
+### 1. Install & Setup (2 phút)
+
+```javascript
+// composables/useEventTracking.js
+const API_ENDPOINT = 'http://localhost:4200/api/events'
+
+export function useEventTracking() {
+  async function trackEvent(eventName, properties = {}, context = {}) {
+    try {
+      const token = localStorage.getItem('access_token')
+      const headers = { 'Content-Type': 'application/json' }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      
+      await fetch(API_ENDPOINT, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ event_name: eventName, properties, context })
+      })
+    } catch (error) {
+      console.error('Event tracking error:', error)
+    }
+  }
+  
+  return { trackEvent }
+}
+```
+
+### 2. Track First Event (1 phút)
+
+```vue
+<script setup>
+import { onMounted } from 'vue'
+import { useEventTracking } from '@/composables/useEventTracking'
+
+const { trackEvent } = useEventTracking()
+
+onMounted(() => {
+  trackEvent('page_view', {
+    page_url: window.location.pathname,
+    page_title: document.title
+  })
+})
+</script>
+```
+
+### 3. Xong! 🎉
+
+Server sẽ tự động:
+- ✅ Tạo cookie `aid` (anonymous ID) - track người dùng ẩn danh
+- ✅ Tạo cookie `sid` (session ID) - track session
+- ✅ Extract `user_id` từ JWT token (nếu có)
+- ✅ Thêm context: user_agent, IP, referer, UTM
+- ✅ Lưu vào MongoDB với queue processing
+
+**Bạn KHÔNG CẦN gửi:** `anonymous_id`, `session_id`, `user_id` - server lo hết!
+
+---
+
+## 📚 Frontend Guide - 17 Event Types
+
+Dưới đây là **17 event types** với **ví dụ code chi tiết** cho từng trường hợp sử dụng.
+
+---
+
+### 1️⃣ Navigation Events
+
+#### 1.1. `page_view` - Track Page Visit
+
+**Khi nào dùng:** Mỗi khi user vào một trang mới
+
+**Properties:**
+```typescript
+{
+  page_url: string      // Required - "/products/123"
+  page_title: string    // Required - "Royal Canin Medium Adult"
+  referrer?: string     // Optional - "/categories/thuc-an"
+}
+```
+
+**Ví dụ 1: Track trong Layout**
+```vue
+<!-- layouts/default.vue -->
+<script setup>
+import { watch } from 'vue'
+import { useRoute } from 'vue-router'
+import { useEventTracking } from '@/composables/useEventTracking'
+
+const route = useRoute()
+const { trackEvent } = useEventTracking()
+
+// Track mỗi khi route thay đổi
+watch(() => route.path, () => {
+  trackEvent('page_view', {
+    page_url: route.path,
+    page_title: document.title,
+    referrer: document.referrer
+  })
+}, { immediate: true })
+</script>
+```
+
+**Ví dụ 2: Track với metadata**
+```vue
+<!-- pages/products/[id].vue -->
+<script setup>
+import { onMounted } from 'vue'
+
+onMounted(() => {
+  trackEvent('page_view', {
+    page_url: route.path,
+    page_title: 'Product Detail - Royal Canin',
+    referrer: route.query.from || document.referrer,
+    // Thêm metadata tùy chỉnh
+    page_type: 'product_detail',
+    product_id: route.params.id
+  })
+})
+</script>
+```
+
+---
+
+#### 1.2. `category_view` - Track Category Page
+
+**Khi nào dùng:** User vào trang danh mục sản phẩm
+
+**Properties:**
+```typescript
+{
+  category_id: string      // Required
+  category_name: string    // Required
+  category_slug?: string   // Optional
+  products_count?: number  // Optional - số sản phẩm trong category
+}
+```
+
+**Ví dụ Chi tiết:**
+```vue
+<!-- pages/categories/[slug].vue -->
+<script setup>
+import { onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
+import { useEventTracking } from '@/composables/useEventTracking'
+
+const route = useRoute()
+const { trackEvent } = useEventTracking()
+const category = ref(null)
+
+onMounted(async () => {
+  // Fetch category data
+  category.value = await fetchCategory(route.params.slug)
+  
+  // Track category view
+  trackEvent('category_view', {
+    category_id: category.value.id,
+    category_name: category.value.name,
+    category_slug: category.value.slug,
+    products_count: category.value.products_count
+  })
+})
+</script>
+```
+
+---
+
+#### 1.3. `brand_view` - Track Brand Page
+
+**Tương tự `category_view` nhưng cho brand:**
+
+```vue
+<script setup>
+onMounted(async () => {
+  const brand = await fetchBrand(route.params.slug)
+  
+  trackEvent('brand_view', {
+    brand_id: brand.id,
+    brand_name: brand.name,
+    brand_slug: brand.slug,
+    products_count: brand.products_count
+  })
+})
+</script>
+```
+
+---
+
+### 2️⃣ Product Interaction Events
+
+#### 2.1. `product_view` - Track Product Detail View
+
+**Khi nào dùng:** User xem chi tiết sản phẩm (page product detail)
+
+**Properties:**
+```typescript
+{
+  product_id: string        // Required
+  product_name: string      // Required
+  price: number            // Required
+  currency: string         // Required - "VND"
+  category?: string        // Optional - "Thức Ăn > Hạt"
+  brand?: string           // Optional - "Royal Canin"
+  product_type?: string    // Optional - "dog" | "cat"
+  stock?: number           // Optional
+}
+```
+
+**Context (Quan trọng cho Recommendation):**
+```typescript
+{
+  context_product_id?: string  // Sản phẩm user đang xem trước đó
+  list_name?: string          // User đến từ đâu: "search", "category", "recommendation"
+}
+```
+
+**Ví dụ Đầy đủ:**
+```vue
+<!-- pages/products/[id].vue -->
+<script setup>
+import { onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
+import { useEventTracking } from '@/composables/useEventTracking'
+
+const route = useRoute()
+const { trackEvent } = useEventTracking()
+const product = ref(null)
+
+onMounted(async () => {
+  // 1. Fetch product data
+  product.value = await fetchProduct(route.params.id)
+  
+  // 2. Track product view với full context
+  trackEvent('product_view', {
+    // Properties - thông tin sản phẩm
+    product_id: product.value.id,
+    product_name: product.value.name,
+    price: product.value.price,
+    currency: 'VND',
+    category: product.value.category?.full_path, // "Thức Ăn > Hạt > Cho Chó"
+    brand: product.value.brand?.name,
+    product_type: product.value.pet_type, // "dog" hoặc "cat"
+    stock: product.value.stock_quantity
+  }, {
+    // Context - user journey
+    context_product_id: route.query.from_product,  // Sản phẩm trước đó
+    list_name: route.query.list || 'direct'        // Nguồn traffic
+  })
+  
+  // 3. Track page view (optional)
+  trackEvent('page_view', {
+    page_url: route.path,
+    page_title: `${product.value.name} - PetPet`
+  })
+})
+</script>
+```
+
+**Ví dụ với các nguồn khác nhau:**
+
+```javascript
+// User từ search → product detail
+router.push({
+  name: 'product-detail',
+  params: { id: product.id },
+  query: { list: 'search', query: 'thức ăn cho chó' }
+})
+
+// User từ category → product detail
+router.push({
+  name: 'product-detail',
+  params: { id: product.id },
+  query: { list: 'category', category: 'thuc-an-hat' }
+})
+
+// User từ recommendation → product detail
+router.push({
+  name: 'product-detail',
+  params: { id: product.id },
+  query: {
+    list: 'recommendation_similar',
+    from_product: currentProduct.id,
+    rec_id: 'rec_20241022_123'
+  }
+})
+```
+
+---
+
+#### 2.2. `product_click` - Track Product Card Click
+
+**Khi nào dùng:** User click vào product card (TRƯỚC KHI navigate)
+
+**Properties:**
+```typescript
+{
+  product_id: string     // Required
+  product_name: string   // Required
+  position?: number      // Optional - vị trí trong list (0-indexed)
+  list_name?: string     // Optional - "search", "category", "recommendation"
+}
+```
+
+**Ví dụ trong Product List:**
+```vue
+<!-- components/ProductCard.vue -->
+<template>
+  <div @click="handleClick">
+    <img :src="product.image" />
+    <h3>{{ product.name }}</h3>
+    <p>{{ formatPrice(product.price) }}</p>
+  </div>
+</template>
+
+<script setup>
+import { useRouter } from 'vue-router'
+import { useEventTracking } from '@/composables/useEventTracking'
+
+const props = defineProps({
+  product: Object,
+  position: Number,      // Index trong list
+  listName: String       // "search", "category", "recommendation"
+})
+
+const router = useRouter()
+const { trackEvent } = useEventTracking()
+
+function handleClick() {
+  // 1. Track click (fire-and-forget - không chờ response)
+  trackEvent('product_click', {
+    product_id: props.product.id,
+    product_name: props.product.name,
+    position: props.position,
+    list_name: props.listName
+  }).catch(console.error)
+  
+  // 2. Navigate ngay (không chờ tracking)
+  router.push({
+    name: 'product-detail',
+    params: { id: props.product.id },
+    query: {
+      list: props.listName,
+      position: props.position
+    }
+  })
+}
+</script>
+```
+
+**Ví dụ trong Search Results:**
+```vue
+<!-- pages/search.vue -->
+<template>
+  <div class="search-results">
+    <ProductCard
+      v-for="(product, index) in results"
+      :key="product.id"
+      :product="product"
+      :position="index"
+      list-name="search"
+    />
+  </div>
+</template>
+```
+
+---
+
+### 3️⃣ Search Events
+
+#### 3.1. `search_query` - Track Search Input (với Debounce)
+
+**Khi nào dùng:** User đang gõ tìm kiếm (debounce 500ms)
+
+**Properties:**
+```typescript
+{
+  query: string           // Required - từ khóa tìm kiếm
+  results_count?: number  // Optional - số kết quả
+}
+```
+
+**Ví dụ với Debounce:**
+```vue
+<!-- pages/search.vue -->
+<script setup>
+import { ref, watch } from 'vue'
+import { debounce } from 'lodash-es'
+import { useEventTracking } from '@/composables/useEventTracking'
+
+const { trackEvent } = useEventTracking()
+const searchQuery = ref('')
+const results = ref([])
+
+// Debounce tracking để tránh track quá nhiều
+const debouncedTrack = debounce((query, count) => {
+  if (query.length >= 3) { // Chỉ track khi >= 3 ký tự
+    trackEvent('search_query', {
+      query: query,
+      results_count: count
+    })
+  }
+}, 500) // Chờ 500ms sau khi user ngừng gõ
+
+// Watch search query và results
+watch([searchQuery, results], ([query, resultList]) => {
+  debouncedTrack(query, resultList.length)
+})
+
+// Hàm search
+async function search() {
+  if (searchQuery.value.length < 2) return
+  results.value = await searchAPI.search(searchQuery.value)
+}
+</script>
+
+<template>
+  <input 
+    v-model="searchQuery" 
+    @input="search"
+    placeholder="Tìm kiếm sản phẩm..."
+  />
+</template>
+```
+
+---
+
+#### 3.2. `search_submit` - Track Search Submit (với Filters)
+
+**Khi nào dùng:** User nhấn Enter hoặc click nút Search hoặc apply filters
+
+**Properties:**
+```typescript
+{
+  query: string           // Required
+  results_count: number   // Required
+  filters?: {             // Optional - các filter đã apply
+    category?: string
+    brand?: string
+    price_min?: number
+    price_max?: number
+    rating?: number
+    [key: string]: any
+  }
+}
+```
+
+**Ví dụ với Filters:**
+```vue
+<!-- pages/search.vue -->
+<script setup>
+import { ref } from 'vue'
+
+const searchQuery = ref('')
+const results = ref([])
+const filters = ref({
+  category: null,
+  brand: null,
+  price_min: null,
+  price_max: null,
+  rating: null
+})
+
+async function handleSearchSubmit() {
+  // 1. Search với filters
+  results.value = await searchAPI.search(searchQuery.value, filters.value)
+  
+  // 2. Track search submit với full filters
+  trackEvent('search_submit', {
+    query: searchQuery.value,
+    results_count: results.value.length,
+    filters: {
+      category: filters.value.category,
+      brand: filters.value.brand,
+      price_min: filters.value.price_min,
+      price_max: filters.value.price_max,
+      rating: filters.value.rating
+    }
+  })
+}
+
+// Track khi user thay đổi filter
+function handleFilterChange() {
+  handleSearchSubmit()
+}
+</script>
+
+<template>
+  <form @submit.prevent="handleSearchSubmit">
+    <input v-model="searchQuery" />
+    
+    <!-- Filters -->
+    <select v-model="filters.category" @change="handleFilterChange">
+      <option value="">Tất cả danh mục</option>
+      <option value="thuc-an">Thức ăn</option>
+      <option value="phu-kien">Phụ kiện</option>
+    </select>
+    
+    <select v-model="filters.brand" @change="handleFilterChange">
+      <option value="">Tất cả thương hiệu</option>
+      <option value="royal-canin">Royal Canin</option>
+      <option value="pedigree">Pedigree</option>
+    </select>
+    
+    <button type="submit">Tìm kiếm</button>
+  </form>
+</template>
+```
+
+---
+
+### 4️⃣ Cart & Wishlist Events
+
+#### 4.1. `add_to_cart` - Track Add to Cart
+
+**Properties:**
+```typescript
+{
+  product_id: string      // Required
+  product_name: string    // Required
+  price: number          // Required
+  currency: string       // Required - "VND"
+  quantity: number       // Required
+  variant_id?: string    // Optional - nếu có variant (size, color...)
+}
+```
+
+**Ví dụ Chi tiết:**
+```vue
+<!-- pages/products/[id].vue hoặc components/ProductCard.vue -->
+<script setup>
+import { ref } from 'vue'
+import { useCartStore } from '@/stores/cart'
+import { useEventTracking } from '@/composables/useEventTracking'
+
+const cartStore = useCartStore()
+const { trackEvent } = useEventTracking()
+
+const product = ref(null)
+const quantity = ref(1)
+const selectedVariant = ref(null) // Nếu có variants
+
+async function handleAddToCart() {
+  try {
+    // 1. Add to cart (API call)
+    await cartStore.addItem({
+      product_id: product.value.id,
+      quantity: quantity.value,
+      variant_id: selectedVariant.value?.id
+    })
+    
+    // 2. Track event
+    trackEvent('add_to_cart', {
+      product_id: product.value.id,
+      product_name: product.value.name,
+      price: selectedVariant.value?.price || product.value.price,
+      currency: 'VND',
+      quantity: quantity.value,
+      variant_id: selectedVariant.value?.id
+    })
+    
+    // 3. Show success message
+    showToast('Đã thêm vào giỏ hàng!')
+    
+  } catch (error) {
+    console.error('Add to cart failed:', error)
+  }
+}
+</script>
+
+<template>
+  <div>
+    <!-- Quantity selector -->
+    <input v-model.number="quantity" type="number" min="1" />
+    
+    <!-- Variant selector (nếu có) -->
+    <select v-model="selectedVariant" v-if="product.variants">
+      <option v-for="variant in product.variants" :key="variant.id" :value="variant">
+        {{ variant.name }} - {{ formatPrice(variant.price) }}
+      </option>
+    </select>
+    
+    <!-- Add to cart button -->
+    <button @click="handleAddToCart">
+      Thêm vào giỏ hàng
+    </button>
+  </div>
+</template>
+```
+
+---
+
+#### 4.2. `remove_from_cart` - Track Remove from Cart
+
+```vue
+<!-- pages/cart.vue -->
+<script setup>
+async function handleRemoveItem(item) {
+  // 1. Remove from cart
+  await cartStore.removeItem(item.id)
+  
+  // 2. Track event
+  trackEvent('remove_from_cart', {
+    product_id: item.product_id,
+    quantity: item.quantity
+  })
+}
+</script>
+```
+
+---
+
+#### 4.3. `add_to_wishlist` - Track Add to Wishlist
+
+```vue
+<script setup>
+async function handleAddToWishlist(product) {
+  await wishlistStore.add(product.id)
+  
+  trackEvent('add_to_wishlist', {
+    product_id: product.id,
+    product_name: product.name,
+    price: product.price,
+    currency: 'VND'
+  })
+  
+  showToast('Đã thêm vào yêu thích!')
+}
+</script>
+```
+
+---
+
+#### 4.4. `remove_from_wishlist` - Track Remove from Wishlist
+
+```vue
+<script setup>
+async function handleRemoveFromWishlist(product) {
+  await wishlistStore.remove(product.id)
+  
+  trackEvent('remove_from_wishlist', {
+    product_id: product.id
+  })
+}
+</script>
+```
+
+---
+
+### 5️⃣ Purchase Event
+
+#### 5.1. `purchase` - Track Order Complete
+
+**Khi nào dùng:** User hoàn tất đơn hàng (trang success sau khi thanh toán)
+
+**Properties:**
+```typescript
+{
+  order_id: string          // Required
+  total_amount: number      // Required - tổng tiền
+  currency: string          // Required - "VND"
+  shipping_fee?: number     // Optional
+  discount?: number         // Optional - số tiền giảm
+  tax?: number             // Optional
+  payment_method?: string  // Optional - "vnpay", "momo", "cod"
+  products: Array<{        // Required - danh sách sản phẩm
+    product_id: string
+    product_name: string
+    price: number
+    quantity: number
+    category?: string
+    brand?: string
+  }>
+}
+```
+
+**Ví dụ Đầy đủ:**
+```vue
+<!-- pages/checkout/success.vue -->
+<script setup>
+import { onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
+import { useEventTracking } from '@/composables/useEventTracking'
+
+const route = useRoute()
+const { trackEvent } = useEventTracking()
+const order = ref(null)
+
+onMounted(async () => {
+  // 1. Get order ID from URL query
+  const orderId = route.query.orderId || route.params.id
+  
+  // 2. Fetch order details
+  order.value = await fetchOrderDetails(orderId)
+  
+  // 3. Track purchase event
+  trackEvent('purchase', {
+    // Order info
+    order_id: order.value.id,
+    total_amount: order.value.total_amount,
+    currency: 'VND',
+    shipping_fee: order.value.shipping_fee,
+    discount: order.value.discount_amount,
+    tax: order.value.tax_amount,
+    payment_method: order.value.payment_method, // "vnpay", "momo", "cod"
+    
+    // Products list
+    products: order.value.items.map(item => ({
+      product_id: item.product.id,
+      product_name: item.product.name,
+      price: item.price,          // Giá tại thời điểm mua
+      quantity: item.quantity,
+      category: item.product.category?.name,
+      brand: item.product.brand?.name
+    }))
+  })
+  
+  // 4. Clear cart (optional)
+  cartStore.clear()
+})
+</script>
+
+<template>
+  <div class="success-page">
+    <h1>✅ Đặt hàng thành công!</h1>
+    <p>Mã đơn hàng: {{ order?.id }}</p>
+    <p>Tổng tiền: {{ formatPrice(order?.total_amount) }}</p>
+  </div>
+</template>
+```
+
+---
+
+### 6️⃣ Recommendation Events
+
+#### 6.1. `recommendation_impression` - Track Recommendation Widget Shown
+
+**Khi nào dùng:** Recommendation widget xuất hiện trên màn hình (50% visible)
+
+**Properties:**
+```typescript
+{
+  recommendation_id: string    // Required - unique ID của recommendation session
+  algorithm: string           // Required - "collaborative_filtering", "content_based"...
+  product_ids: string[]       // Required - danh sách product IDs được recommend
+  displayed_count: number     // Required - số sản phẩm hiển thị
+}
+```
+
+**Context:**
+```typescript
+{
+  context_product_id?: string  // Sản phẩm user đang xem (nếu có)
+  list_name: string           // "recommendation_similar", "recommendation_bought_together"
+}
+```
+
+**Ví dụ với Intersection Observer:**
+```vue
+<!-- components/RecommendationWidget.vue -->
+<script setup>
+import { onMounted, ref } from 'vue'
+import { useEventTracking } from '@/composables/useEventTracking'
+
+const props = defineProps({
+  recommendationId: String,     // "rec_20241022_123456"
+  algorithm: String,            // "collaborative_filtering"
+  products: Array,              // Danh sách sản phẩm recommend
+  contextProductId: String,     // Sản phẩm đang xem
+  listName: String             // "recommendation_similar"
+})
+
+const { trackEvent } = useEventTracking()
+const widgetRef = ref(null)
+let tracked = false
+
+onMounted(() => {
+  // Sử dụng Intersection Observer để track khi widget visible
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach(entry => {
+        // Chỉ track 1 lần khi widget 50% visible
+        if (entry.isIntersecting && !tracked) {
+          tracked = true
+          
+          trackEvent('recommendation_impression', {
+            recommendation_id: props.recommendationId,
+            algorithm: props.algorithm,
+            product_ids: props.products.map(p => p.id),
+            displayed_count: props.products.length
+          }, {
+            context_product_id: props.contextProductId,
+            list_name: props.listName
+          })
+          
+          observer.disconnect() // Disconnect sau khi track
+        }
+      })
+    },
+    { threshold: 0.5 } // 50% visible
+  )
+  
+  if (widgetRef.value) {
+    observer.observe(widgetRef.value)
+  }
+})
+</script>
+
+<template>
+  <div ref="widgetRef" class="recommendation-widget">
+    <h3>Sản phẩm tương tự</h3>
+    <div class="products-grid">
+      <ProductCard
+        v-for="(product, index) in products"
+        :key="product.id"
+        :product="product"
+        :position="index"
+        :list-name="listName"
+      />
+    </div>
+  </div>
+</template>
+```
+
+**Ví dụ sử dụng trong Product Detail:**
+```vue
+<!-- pages/products/[id].vue -->
+<template>
+  <div>
+    <!-- Product info -->
+    <ProductInfo :product="product" />
+    
+    <!-- Recommendation widget -->
+    <RecommendationWidget
+      recommendation-id="rec_20241022_123456"
+      algorithm="collaborative_filtering"
+      :products="similarProducts"
+      :context-product-id="product.id"
+      list-name="recommendation_similar"
+    />
+  </div>
+</template>
+```
+
+---
+
+#### 6.2. `recommendation_click` - Track Click on Recommended Product
+
+```vue
+<!-- components/ProductCard.vue trong recommendation widget -->
+<script setup>
+function handleClick() {
+  // Track recommendation click
+  if (props.isRecommendation) {
+    trackEvent('recommendation_click', {
+      recommendation_id: props.recommendationId,
+      product_id: props.product.id,
+      position: props.position,
+      algorithm: props.algorithm
+    }, {
+      context_product_id: props.contextProductId,
+      list_name: props.listName
+    })
+  }
+  
+  // Navigate
+  router.push({
+    name: 'product-detail',
+    params: { id: props.product.id },
+    query: {
+      list: props.listName,
+      from_product: props.contextProductId,
+      rec_id: props.recommendationId
+    }
+  })
+}
+</script>
+```
+
+---
+
+#### 6.3. `recommendation_add_to_cart` - Add to Cart from Recommendation
+
+```vue
+<script setup>
+async function handleAddToCart() {
+  await cartStore.addItem(props.product.id, 1)
+  
+  // Track nếu là từ recommendation
+  if (props.isRecommendation) {
+    trackEvent('recommendation_add_to_cart', {
+      recommendation_id: props.recommendationId,
+      product_id: props.product.id,
+      quantity: 1,
+      algorithm: props.algorithm
+    }, {
+      context_product_id: props.contextProductId
+    })
+  }
+}
+</script>
+```
+
+---
+
+#### 6.4. `recommendation_add_to_wishlist` - Add to Wishlist from Recommendation
+
+```vue
+<script setup>
+async function handleAddToWishlist() {
+  await wishlistStore.add(props.product.id)
+  
+  if (props.isRecommendation) {
+    trackEvent('recommendation_add_to_wishlist', {
+      recommendation_id: props.recommendationId,
+      product_id: props.product.id,
+      algorithm: props.algorithm
+    }, {
+      context_product_id: props.contextProductId
+    })
+  }
+}
+</script>
+```
+
+---
+
+## 🛠 Vue 3 Composable (Ready to Use)
+
+Copy & paste composable này vào project:
+
+```javascript
+// composables/useEventTracking.js
+const API_ENDPOINT = 'http://localhost:4200/api/events'
+
+async function trackEvent(eventName, properties = {}, context = {}) {
+  try {
+    const token = localStorage.getItem('access_token')
+    const headers = { 'Content-Type': 'application/json' }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    
+    await fetch(API_ENDPOINT, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        event_name: eventName,
+        properties,
+        context
+      })
+    })
+  } catch (error) {
+    console.error('Event tracking error:', error)
+  }
+}
+
+export function useEventTracking() {
+  // Page view
+  function trackPageView(pageUrl = window.location.pathname, pageTitle = document.title) {
+    trackEvent('page_view', {
+      page_url: pageUrl,
+      page_title: pageTitle,
+      referrer: document.referrer
+    })
+  }
+  
+  // Product view
+  function trackProductView(product, contextProductId = null, listName = null) {
+    trackEvent('product_view', {
+      product_id: product.id,
+      product_name: product.name,
+      price: product.price,
+      currency: 'VND',
+      category: product.category?.full_path,
+      brand: product.brand?.name,
+      product_type: product.pet_type
+    }, {
+      context_product_id: contextProductId,
+      list_name: listName
+    })
+  }
+  
+  // Product click
+  function trackProductClick(product, position, listName) {
+    trackEvent('product_click', {
+      product_id: product.id,
+      product_name: product.name,
+      position,
+      list_name: listName
+    })
+  }
+  
+  // Add to cart
+  function trackAddToCart(product, quantity = 1, variantId = null) {
+    trackEvent('add_to_cart', {
+      product_id: product.id,
+      product_name: product.name,
+      price: product.price,
+      currency: 'VND',
+      quantity,
+      variant_id: variantId
+    })
+  }
+  
+  // Remove from cart
+  function trackRemoveFromCart(productId, quantity) {
+    trackEvent('remove_from_cart', {
+      product_id: productId,
+      quantity
+    })
+  }
+  
+  // Add to wishlist
+  function trackAddToWishlist(product) {
+    trackEvent('add_to_wishlist', {
+      product_id: product.id,
+      product_name: product.name,
+      price: product.price,
+      currency: 'VND'
+    })
+  }
+  
+  // Search
+  function trackSearch(query, resultsCount, filters = {}) {
+    trackEvent('search_submit', {
+      query,
+      results_count: resultsCount,
+      filters
+    })
+  }
+  
+  // Purchase
+  function trackPurchase(order) {
+    trackEvent('purchase', {
+      order_id: order.id,
+      total_amount: order.total_amount,
+      currency: 'VND',
+      shipping_fee: order.shipping_fee,
+      discount: order.discount_amount,
+      payment_method: order.payment_method,
+      products: order.items.map(item => ({
+        product_id: item.product.id,
+        product_name: item.product.name,
+        price: item.price,
+        quantity: item.quantity,
+        category: item.product.category?.name,
+        brand: item.product.brand?.name
+      }))
+    })
+  }
+  
+  // Recommendation impression
+  function trackRecommendationImpression(recommendationId, products, algorithm, contextProductId, listName) {
+    trackEvent('recommendation_impression', {
+      recommendation_id: recommendationId,
+      algorithm,
+      product_ids: products.map(p => p.id),
+      displayed_count: products.length
+    }, {
+      context_product_id: contextProductId,
+      list_name: listName
+    })
+  }
+  
+  // Recommendation click
+  function trackRecommendationClick(recommendationId, productId, position, algorithm, contextProductId, listName) {
+    trackEvent('recommendation_click', {
+      recommendation_id: recommendationId,
+      product_id: productId,
+      position,
+      algorithm
+    }, {
+      context_product_id: contextProductId,
+      list_name: listName
+    })
+  }
+  
+  return {
+    trackEvent,
+    trackPageView,
+    trackProductView,
+    trackProductClick,
+    trackAddToCart,
+    trackRemoveFromCart,
+    trackAddToWishlist,
+    trackSearch,
+    trackPurchase,
+    trackRecommendationImpression,
+    trackRecommendationClick
+  }
+}
+```
+
+---
+
+## ✅ Frontend Best Practices
+
+### 1. ❌ KHÔNG await tracking (trừ purchase)
+
+```javascript
+// ✅ ĐÚNG - Fire-and-forget
+function handleProductClick(product) {
+  trackProductClick(product, index, 'search')
+    .catch(console.error)  // Log error nhưng không throw
+  
+  router.push(`/products/${product.id}`)  // Navigate ngay
+}
+
+// ❌ SAI - Await sẽ delay navigation
+async function handleProductClick(product) {
+  await trackProductClick(product, index, 'search')  // ❌ Chờ
+  router.push(`/products/${product.id}`)
+}
+```
+
+**Exception:** Chỉ await cho `purchase` event:
+```javascript
+// ✅ OK - Await purchase để đảm bảo data được ghi
+await trackPurchase(order)
+```
+
+### 2. ✅ Debounce cho search
+
+```javascript
+const debouncedSearch = debounce((query, count) => {
+  if (query.length >= 3) {
+    trackEvent('search_query', { query, results_count: count })
+  }
+}, 500) // 500ms
+```
+
+### 3. ✅ Intersection Observer cho impressions
+
+```javascript
+const observer = new IntersectionObserver(
+  (entries) => {
+    if (entries[0].isIntersecting && !tracked) {
+      trackRecommendationImpression(...)
+      tracked = true
+      observer.disconnect()
+    }
+  },
+  { threshold: 0.5 } // 50% visible
+)
+```
+
+### 4. ✅ Validate data trước khi track
+
+```javascript
+function trackProductView(product, contextProductId, listName) {
+  if (!product?.id) {
+    console.warn('Invalid product for tracking')
+    return
+  }
+  
+  trackEvent('product_view', {
+    product_id: product.id,
+    product_name: product.name || 'Unknown',
+    price: product.price || 0,
+    currency: 'VND'
+  })
+}
+```
+
+### 5. ❌ KHÔNG gửi sensitive data
+
+```javascript
+// ❌ SAI
+trackEvent('user_login', {
+  email: 'user@example.com',  // ❌
+  password: '123456'           // ❌
+})
+
+// ✅ ĐÚNG
+trackEvent('user_login', {
+  login_method: 'email',
+  user_type: 'customer'
+})
+```
+
+---
+
+## 📡 API Reference
+
+### Endpoint
+```
+POST http://localhost:4200/api/events
+```
+
+### Headers
+```http
+Content-Type: application/json
+Authorization: Bearer <jwt_token>  # Optional
+```
+
+### Request Body
+```json
+{
+  "event_name": "product_view",
+  "properties": {
+    "product_id": "123",
+    "product_name": "Royal Canin"
+  },
+  "context": {
+    "context_product_id": "456",
+    "list_name": "recommendation"
+  }
+}
+```
+
+### Response Success (200)
+```json
+{
+  "success": true,
+  "data": {
+    "anonymous_id": "uuid",
+    "session_id": "uuid",
+    "user_id": "user_123"
+  }
+}
+```
+
+### Response Error (400)
+```json
+{
+  "success": false,
+  "error": [
+    {
+      "code": "invalid_type",
+      "path": ["event_name"],
+      "message": "Required"
+    }
+  ]
+}
+```
+
+---
+
+# ⚙️ BACKEND GUIDE
+
+---
+
+## 🏗 Backend Guide - System Architecture
 
 ### Complete Request Flow
 
@@ -140,7 +1406,9 @@ curl -X POST http://localhost:4200/api/events \
 
 ---
 
-## 🔄 Request Flow
+## 🔄 Request Flow Chi tiết
+
+> **📌 Phần này dành cho Backend Developers**
 
 ### 1. Request đến server
 ```javascript
@@ -409,9 +1677,11 @@ static async updateStatus(id: ObjectId, status: EventStatus, error?: string) {
 
 **Worker khởi động:** `src/workers/register.ts` được import trong `src/app.ts`
 
----
-
 ## 🔐 Authentication & Identity
+
+> **📌 Phần này dành cho Backend Developers**
+
+### 1. Anonymous ID (`aid` cookie)
 
 ### 1. Anonymous ID (`aid` cookie)
 
@@ -499,9 +1769,11 @@ async function resolveUserFromToken(c, token, identity, now) {
 }
 ```
 
-**⚠️ Frontend KHÔNG CẦN gửi `user_id` trong request body - Server tự extract từ JWT token!**
+## 📝 Request Schema
 
----
+> **📌 Phần này dành cho Backend Developers để hiểu validation flow**
+
+### Zod Validation Schema
 
 ## 📝 Request Schema
 
@@ -565,9 +1837,12 @@ export const eventSchema = z.object({
     "context_product_id": "prod_456"
   }
 }
-```
+## ✅ Response Format
 
----
+> **📌 Frontend: Xem phần này để biết response structure**  
+> **📌 Backend: Xem để hiểu controller return format**
+
+### Success Response
 
 ## ✅ Response Format
 
@@ -1346,9 +2621,12 @@ onMounted(() => {
   "context": {
     "context_product_id": "prod_main_789"
   }
-}
-```
+## 🌍 Context Enrichment
 
+> **📌 Backend: Hiểu cách server enrich context**  
+> **📌 Frontend: Biết fields nào server tự động thêm**
+
+### Server tự động thêm các fields sau:
 ---
 
 ## 🌍 Context Enrichment
@@ -1398,9 +2676,11 @@ function buildRequestContext(c: Context): Record<string, unknown> | null {
   "context": {
     "context_product_id": "prod_123",
     "list_name": "recommendation_similar"
-  }
-}
-```
+## ⚙️ Queue & Worker System
+
+> **📌 Phần này dành cho Backend Developers**
+
+### EventQueue (MongoDB)
 
 Server sẽ merge với context tự động enrich.
 
@@ -1598,9 +2878,11 @@ EventQueue.updateStatus(Completed)  ← Mark done
 
 **Key Points:**
 - ✅ **Non-blocking:** API trả về ngay sau khi tạo event
-- ✅ **No external dependency:** Không cần Redis Cloud riêng
-- ✅ **Atomic:** findOneAndUpdate prevents race conditions
-- ✅ **Event-driven:** listenNewEvent() cho efficient waiting
+## 💻 DEPRECATED - Implementation Guide (Đã move lên trên)
+
+> **⚠️ Phần này đã được move lên Frontend Guide với ví dụ chi tiết hơn**
+
+### Vue 3 Composable* listenNewEvent() cho efficient waiting
 - ✅ **Retry logic:** Worker tự động retry 3 lần nếu lỗi
 - ✅ **Multi-host support:** Track hostname/platform cho distributed setup
 
@@ -1804,9 +3086,11 @@ onMounted(() => {
       v-for="product in products" 
       :key="product.id" 
       :product="product" 
-    />
-  </div>
-</template>
+## ✅ DEPRECATED - Best Practices (Đã move lên trên)
+
+> **⚠️ Phần này đã được move lên Frontend Best Practices với ví dụ chi tiết hơn**
+
+### 1. Error Handling
 ```
 
 ---
@@ -1912,9 +3196,11 @@ trackEvent('user_login', {
   password: '123456'           // ❌ SAI
 })
 
-// ✅ ĐÚNG - Chỉ gửi metadata
-trackEvent('user_login', {
-  login_method: 'email',
+## 💾 Database Schema
+
+> **📌 Phần này dành cho Backend Developers**
+
+### MongoDB Collection: `events`
   user_type: 'customer'
 })
 ```
@@ -2006,15 +3292,17 @@ db.events.aggregate([
   {
     $group: {
       _id: '$session_id',
-      products: { $push: '$properties.product_id' }
-    }
-  }
+## 🐛 Backend Troubleshooting
+
+> **📌 Phần này dành cho Backend Developers**
+
+### 1. Events không được track?
 ])
 ```
 
 ---
 
-## 🐛 Troubleshooting
+## 🐛 Backend Troubleshooting
 
 ### 1. Events không được track?
 
@@ -2199,11 +3487,33 @@ db.events.find({ queue_status: "Pending" })
 - **Interfaces:** `src/models/interfaces/tracking_events.ts`
 - **Repository:** `src/repositories/event.repository.ts`
 
-### Contact
+---
 
-- **Backend Team:** [backend-team@example.com]
-- **Slack:** #event-tracking
-- **Project:** pepe_web/api
+## 📚 Summary
+
+### Frontend Developers - What You Need:
+1. ✅ Copy `useEventTracking` composable vào project
+2. ✅ Track events theo từng màn hình với ví dụ có sẵn
+3. ✅ Follow best practices (debounce, intersection observer, fire-and-forget)
+4. ✅ Test với API endpoint: `POST http://localhost:4200/api/events`
+
+### Backend Developers - What You Need:
+1. ✅ Hiểu full request flow: Middleware → Controller → Queue → Worker
+2. ✅ Maintain EventQueue và EventWorker
+3. ✅ Monitor queue status và failed events
+4. ✅ Setup indexes cho MongoDB events collection
+5. ✅ Debug với troubleshooting guide
+
+---
+
+**Document Version:** 2.1.0  
+**Last Updated:** January 2025  
+**Structure:** Separated Frontend Guide & Backend Guide  
+**Based on:** Source Code Analysis (MongoDB Queue Migration)  
+**Maintainer:** Backend Team  
+**Major Changes:**  
+- v2.1.0: Restructured docs with Frontend/Backend separation, added detailed examples for all 17 events
+- v2.0.0: Migrated from Bull (Redis) to MongoDB Queue
 
 ---
 

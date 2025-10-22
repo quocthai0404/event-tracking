@@ -74,50 +74,51 @@
         /* Hero Header */
         .hero {
             background: var(--gradient-hero);
-            padding: 1.5rem 2rem 1rem;
+            padding: 3rem 2rem 2rem;
             text-align: center;
             position: relative;
             overflow: hidden;
-            border-bottom: 2px solid transparent;
+            border-bottom: 3px solid transparent;
             border-image: linear-gradient(90deg, var(--fe-color) 0%, var(--fe-color) 50%, var(--be-color) 50%, var(--be-color) 100%) 1;
         }
 
         .hero h1 {
-            font-size: 1.75rem;
-            font-weight: 800;
+            font-size: 3rem;
+            font-weight: 900;
             color: white;
-            margin-bottom: 0.25rem;
-            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-            letter-spacing: -0.01em;
+            margin-bottom: 0.5rem;
+            text-shadow: 0 2px 20px rgba(0, 0, 0, 0.3);
+            letter-spacing: -0.02em;
         }
 
         .hero-subtitle {
-            font-size: 0.875rem;
-            color: rgba(255, 255, 255, 0.9);
-            margin-bottom: 1rem;
-            font-weight: 400;
+            font-size: 1.25rem;
+            color: rgba(255, 255, 255, 0.95);
+            margin-bottom: 2rem;
+            font-weight: 500;
         }
 
         /* Hero Tab Switcher */
         .hero-tabs {
             display: flex;
-            gap: 0.75rem;
+            gap: 1rem;
             justify-content: center;
-            margin-bottom: 1rem;
+            margin-bottom: 1.5rem;
         }
 
         .hero-tab {
-            padding: 0.5rem 1.5rem;
+            padding: 0.75rem 2.5rem;
             background: rgba(255, 255, 255, 0.15);
             backdrop-filter: blur(10px);
-            border: 1.5px solid rgba(255, 255, 255, 0.3);
-            border-radius: 2rem;
-            font-size: 0.875rem;
-            font-weight: 600;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 3rem;
+            font-size: 1rem;
+            font-weight: 700;
             color: white;
             cursor: pointer;
             transition: all 0.3s ease;
-            letter-spacing: 0.02em;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
             position: relative;
         }
 
@@ -125,8 +126,8 @@
             content: '';
             position: absolute;
             inset: 0;
-            border-radius: 2rem;
-            padding: 1.5px;
+            border-radius: 3rem;
+            padding: 2px;
             background: transparent;
             -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
             -webkit-mask-composite: xor;
@@ -168,18 +169,18 @@
         /* Badges */
         .badges {
             display: flex;
-            gap: 0.5rem;
+            gap: 1rem;
             justify-content: center;
             flex-wrap: wrap;
         }
 
         .badge {
-            padding: 0.35rem 0.85rem;
+            padding: 0.6rem 1.2rem;
             background: rgba(255, 255, 255, 0.15);
             backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.25);
-            border-radius: 1.5rem;
-            font-size: 0.75rem;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 2rem;
+            font-size: 0.875rem;
             font-weight: 600;
             color: white;
         }
@@ -488,25 +489,15 @@
         }
 
         @media (max-width: 768px) {
-            .header h1 {
-                font-size: 1.5rem;
-            }
-            
-            .header p {
-                font-size: 0.8rem;
+            .hero h1 {
+                font-size: 2rem;
             }
 
             .hero-tabs {
                 flex-direction: column;
                 width: 100%;
-                max-width: 250px;
-                margin: 0 auto 1rem;
-                gap: 0.5rem;
-            }
-            
-            .hero-tab {
-                padding: 0.5rem 1rem;
-                font-size: 0.8rem;
+                max-width: 300px;
+                margin: 0 auto 1.5rem;
             }
 
             .content {
@@ -521,15 +512,15 @@
 
     <!-- Hero Header -->
     <div class="hero">
-        <h1>Event Tracking System</h1>
+        <h1>📊 Event Tracking System</h1>
         <p class="hero-subtitle">Complete Technical Documentation</p>
         
         <div class="hero-tabs">
             <button class="hero-tab frontend" onclick="scrollToId('frontend-guide')">
-                🎨 Frontend
+                🎨 Frontend Guide
             </button>
             <button class="hero-tab backend" onclick="scrollToId('backend-guide')">
-                ⚙️ Backend
+                ⚙️ Backend Guide
             </button>
         </div>
         
@@ -562,13 +553,13 @@
         <!-- Sidebar TOC -->
         <aside class="sidebar">
             <div class="toc-section frontend">
-                <div class="toc-title frontend">🎨 FRONTEND GUIDE</div>
-                <ul class="toc" id="toc-frontend"></ul>
+                <div class="toc-title frontend">🎨 Frontend Guide</div>
+                <ul class="toc-links" id="toc-frontend"></ul>
             </div>
             
             <div class="toc-section backend">
-                <div class="toc-title backend">⚙️ BACKEND GUIDE</div>
-                <ul class="toc" id="toc-backend"></ul>
+                <div class="toc-title backend">⚙️ Backend Guide</div>
+                <ul class="toc-links" id="toc-backend"></ul>
             </div>
         </aside>
 
@@ -682,7 +673,7 @@
 
         // Setup navigation active states
         function setupNavigation() {
-            const navLinks = document.querySelectorAll('.nav a, .toc a');
+            const navLinks = document.querySelectorAll('.dual-nav a, .toc-links a');
             const sections = document.querySelectorAll('.content h2[id]');
             
             function setActiveLink() {
