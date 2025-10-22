@@ -1291,6 +1291,14 @@ Authorization: Bearer <jwt_token>  # Optional
 
 ## 🏗 Backend Guide - System Architecture
 
+### System Architecture Diagram
+
+![Event Tracking System Architecture](./mindmap.png)
+
+*Sơ đồ mô tả ý tưởng recommendation dựa trên event log*
+
+---
+
 ### Complete Request Flow
 
 ```

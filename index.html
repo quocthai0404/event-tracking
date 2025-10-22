@@ -38,7 +38,7 @@
             /* Gradients */
             --gradient-fe: linear-gradient(135deg, var(--fe-color) 0%, var(--fe-dark) 100%);
             --gradient-be: linear-gradient(135deg, var(--be-color) 0%, var(--be-dark) 100%);
-            --gradient-hero: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #ec4899 100%);
+            --gradient-hero: linear-gradient(135deg, #1e293b 0%, #334155 100%);
         }
 
         body {
@@ -311,12 +311,12 @@
             background: var(--gradient-be);
         }
 
-        .toc-links {
+        .toc {
             list-style: none;
             padding: 0.5rem 0 1rem;
         }
 
-        .toc-links a {
+        .toc a {
             display: block;
             padding: 0.5rem 1.5rem;
             color: var(--text-secondary);
@@ -326,15 +326,15 @@
             border-left: 3px solid transparent;
         }
 
-        .toc-section.frontend .toc-links a:hover,
-        .toc-section.frontend .toc-links a.active {
+        .toc-section.frontend .toc a:hover,
+        .toc-section.frontend .toc a.active {
             color: var(--fe-color);
             background: rgba(6, 182, 212, 0.1);
             border-left-color: var(--fe-color);
         }
 
-        .toc-section.backend .toc-links a:hover,
-        .toc-section.backend .toc-links a.active {
+        .toc-section.backend .toc a:hover,
+        .toc-section.backend .toc a.active {
             color: var(--be-color);
             background: rgba(249, 115, 22, 0.1);
             border-left-color: var(--be-color);
@@ -426,6 +426,21 @@
         code {
             font-family: 'JetBrains Mono', monospace;
             font-size: 0.9rem;
+        }
+
+        /* Architecture Diagram */
+        .content img {
+            max-width: 100%;
+            height: auto;
+            margin: 2rem 0;
+            border-radius: 12px;
+            border: 2px solid var(--border-color);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .content img[alt*="Architecture"] {
+            background: white;
+            padding: 1.5rem;
         }
 
         /* Scroll to top */
@@ -533,27 +548,22 @@
             </button>
         </div>
         
-        <div class="badges">
-            <span class="badge">v2.1.0</span>
-            <span class="badge">17 Events</span>
-            <span class="badge">MongoDB Queue</span>
-            <span class="badge">Vue 3 Ready</span>
-        </div>
+        
     </div>
 
     <!-- Dual Navigation -->
     <nav class="dual-nav">
         <div class="nav-section frontend">
-            <a href="#frontend-quick-start">🚀 Quick Start</a>
-            <a href="#frontend-events">📚 17 Events</a>
-            <a href="#frontend-composable">🛠 Composable</a>
-            <a href="#frontend-best-practices">✅ Best Practices</a>
+            <a href="#-frontend-quick-start">🚀 Quick Start</a>
+            <a href="#-frontend-guide---17-event-types">📚 17 Events</a>
+            <a href="#-vue-3-composable-ready-to-use">🛠 Composable</a>
+            <a href="#-frontend-best-practices">✅ Best Practices</a>
         </div>
         <div class="nav-section backend">
-            <a href="#backend-architecture">🏗 Architecture</a>
-            <a href="#backend-flow">🔄 Request Flow</a>
-            <a href="#backend-queue">⚙️ Queue System</a>
-            <a href="#backend-troubleshooting">🐛 Troubleshooting</a>
+            <a href="#-backend-guide---system-architecture">🏗 Architecture</a>
+            <a href="#-request-flow-chi-tiết">🔄 Request Flow</a>
+            <a href="#-queue--worker-system">⚙️ Queue System</a>
+            <a href="#-backend-troubleshooting">🐛 Troubleshooting</a>
         </div>
     </nav>
 
@@ -629,22 +639,21 @@
             headers.forEach(header => {
                 const text = header.textContent.toLowerCase();
                 
-                // Detect section
-                if (text.includes('frontend guide') || text.includes('🎨')) {
+                // Detect main section headers
+                if (text.includes('frontend guide') || text.includes('🎨 frontend guide')) {
                     currentSection = 'frontend';
                     header.classList.add('frontend');
-                    header.id = header.id || 'frontend-guide';
-                } else if (text.includes('backend guide') || text.includes('⚙️')) {
+                } else if (text.includes('backend guide') || text.includes('⚙️ backend guide')) {
                     currentSection = 'backend';
                     header.classList.add('backend');
-                    header.id = header.id || 'backend-guide';
-                } else if (currentSection) {
+                } else if (currentSection && header.tagName === 'H2') {
+                    // Apply section class to H2 headers
                     header.classList.add(currentSection);
                 }
                 
                 // Add blockquote classes
                 const nextEl = header.nextElementSibling;
-                if (nextEl && nextEl.tagName === 'BLOCKQUOTE') {
+                if (nextEl && nextEl.tagName === 'BLOCKQUOTE' && currentSection) {
                     nextEl.classList.add(currentSection);
                 }
             });
@@ -682,22 +691,26 @@
 
         // Setup navigation active states
         function setupNavigation() {
-            const navLinks = document.querySelectorAll('.nav a, .toc a');
+            const navLinks = document.querySelectorAll('.dual-nav a, .toc a');
             const sections = document.querySelectorAll('.content h2[id]');
             
             function setActiveLink() {
                 let current = '';
+                const scrollPos = window.scrollY;
                 
                 sections.forEach(section => {
-                    const sectionTop = section.offsetTop;
-                    if (scrollY >= sectionTop - 100) {
+                    const sectionTop = section.offsetTop - 150;
+                    const sectionBottom = sectionTop + section.offsetHeight;
+                    
+                    if (scrollPos >= sectionTop && scrollPos < sectionBottom) {
                         current = section.getAttribute('id');
                     }
                 });
                 
                 navLinks.forEach(link => {
                     link.classList.remove('active');
-                    if (link.getAttribute('href') === `#${current}`) {
+                    const href = link.getAttribute('href');
+                    if (href === `#${current}`) {
                         link.classList.add('active');
                     }
                 });
@@ -705,6 +718,23 @@
             
             window.addEventListener('scroll', setActiveLink);
             setActiveLink();
+            
+            // Add click handlers for smooth scroll
+            navLinks.forEach(link => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const targetId = link.getAttribute('href').substring(1);
+                    const targetElement = document.getElementById(targetId);
+                    if (targetElement) {
+                        const navHeight = document.querySelector('.dual-nav').offsetHeight;
+                        const targetPosition = targetElement.offsetTop - navHeight - 20;
+                        window.scrollTo({
+                            top: targetPosition,
+                            behavior: 'smooth'
+                        });
+                    }
+                });
+            });
         }
 
         // Progress bar
@@ -727,9 +757,26 @@
 
         // Scroll to ID helper
         function scrollToId(id) {
-            const element = document.getElementById(id);
-            if (element) {
-                element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // Find the first H1 with the matching section
+            const headers = document.querySelectorAll('.content h1');
+            let targetElement = null;
+            
+            headers.forEach(header => {
+                const text = header.textContent.toLowerCase();
+                if (id === 'frontend-guide' && (text.includes('frontend guide') || text.includes('🎨'))) {
+                    targetElement = header;
+                } else if (id === 'backend-guide' && (text.includes('backend guide') || text.includes('⚙️'))) {
+                    targetElement = header;
+                }
+            });
+            
+            if (targetElement) {
+                const navHeight = document.querySelector('.dual-nav').offsetHeight;
+                const targetPosition = targetElement.offsetTop - navHeight - 20;
+                window.scrollTo({
+                    top: targetPosition,
+                    behavior: 'smooth'
+                });
             }
         }
 
