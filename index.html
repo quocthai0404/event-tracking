@@ -612,15 +612,18 @@
                 marked.use({
                     renderer: {
                         heading(text, level) {
+                            // text might be an object, extract the actual text
+                            const textContent = typeof text === 'string' ? text : text.text || '';
+                            
                             // Create ID from text
-                            const id = text
+                            const id = textContent
                                 .toLowerCase()
                                 .replace(/[^\w\s-]/g, '') // Remove special chars except spaces and hyphens
                                 .replace(/\s+/g, '-')      // Replace spaces with hyphens
                                 .replace(/-+/g, '-')       // Replace multiple hyphens with single
                                 .trim();
                             
-                            return `<h${level} id="${id}">${text}</h${level}>`;
+                            return `<h${level} id="${id}">${textContent}</h${level}>`;
                         }
                     }
                 });
