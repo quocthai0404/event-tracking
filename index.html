@@ -608,6 +608,23 @@
                 const response = await fetch('EVENT_TRACKING_DOCUMENTATION.md');
                 const markdown = await response.text();
                 
+                // Configure marked to add IDs to all headers
+                marked.use({
+                    renderer: {
+                        heading(text, level) {
+                            // Create ID from text
+                            const id = text
+                                .toLowerCase()
+                                .replace(/[^\w\s-]/g, '') // Remove special chars except spaces and hyphens
+                                .replace(/\s+/g, '-')      // Replace spaces with hyphens
+                                .replace(/-+/g, '-')       // Replace multiple hyphens with single
+                                .trim();
+                            
+                            return `<h${level} id="${id}">${text}</h${level}>`;
+                        }
+                    }
+                });
+                
                 // Render markdown
                 const html = marked.parse(markdown);
                 document.getElementById('markdown-content').innerHTML = html;
@@ -618,8 +635,9 @@
                 // Generate TOC
                 generateTOC();
                 
-                // Setup navigation
+                // Setup navigation and internal links
                 setupNavigation();
+                setupInternalLinks();
                 
                 // Highlight code
                 Prism.highlightAll();
@@ -665,13 +683,23 @@
             const tocBackend = document.getElementById('toc-backend');
             const headers = document.querySelectorAll('.content h2, .content h3');
             
+            // Clear existing TOC
+            tocFrontend.innerHTML = '';
+            tocBackend.innerHTML = '';
+            
             headers.forEach(header => {
                 if (!header.id) return;
                 
                 const li = document.createElement('li');
                 const a = document.createElement('a');
                 a.href = `#${header.id}`;
-                a.textContent = header.textContent.replace(/^[🎨⚙️📚🚀🛠✅🏗🔄🐛]+\s*/, '');
+                
+                // Clean up text - remove emojis
+                let cleanText = header.textContent
+                    .replace(/^[🎨⚙️📚🚀🛠✅🏗🔄🐛📡💻🌍🎯🔐📝⚡]+\s*/, '')
+                    .trim();
+                
+                a.textContent = cleanText;
                 
                 if (header.tagName === 'H3') {
                     a.style.paddingLeft = '2rem';
@@ -686,6 +714,28 @@
                 } else if (header.classList.contains('backend')) {
                     tocBackend.appendChild(li);
                 }
+            });
+        }
+
+        // Setup internal links (links within the content)
+        function setupInternalLinks() {
+            const contentLinks = document.querySelectorAll('.content a[href^="#"]');
+            
+            contentLinks.forEach(link => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const targetId = link.getAttribute('href').substring(1);
+                    const targetElement = document.getElementById(targetId);
+                    
+                    if (targetElement) {
+                        const navHeight = document.querySelector('.dual-nav')?.offsetHeight || 60;
+                        const targetPosition = targetElement.offsetTop - navHeight - 20;
+                        window.scrollTo({
+                            top: targetPosition,
+                            behavior: 'smooth'
+                        });
+                    }
+                });
             });
         }
 
